@@ -1,0 +1,81 @@
+pipeline {
+agent any
+tools {
+    maven 'maven'
+}
+environment{
+    SCANNER_HOME = tool 'sonar-scanner' 
+}
+stages {
+stage('Git checkout') {
+    steps {
+        checkout scmGit(branches: [[name: '*/master']], extensions: [], userRemoteConfigs: [[url: 'https://github.com/suryaln/Java-CICD.git']])
+    }
+}
+stage('SonarQube Analysis') {
+  steps {
+     script{
+       withSonarQubeEnv('SonarQube') { 
+            sh """
+            ${SCANNER_HOME}/bin/sonar-scanner \
+            -Dsonar.projectKey=spring-app \
+            -Dsonar.projectName="springboot-app" \
+            -Dsonar.sources=. 
+            """
+           }
+         }
+      }
+  }
+        
+stage('Quality Gate') {
+     steps {
+         script {
+             timeout(time: 5, unit: 'MINUTES') {
+                 waitForQualityGate abortPipeline: true
+             }
+         }
+     }
+}
+       stage('change directory to dockerfile section & build docker image') {
+        steps {
+            sh '''pwd
+             cd Java-CICD/spring-boot-app/
+             docker build -t java-app:${BUILD_NUMBER} .
+            '''
+        }
+    }
+     stage('Tag & push - dockerimage') {
+        steps {
+           withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', 
+           passwordVariable: 'dockerhub_password', usernameVariable: 'dockerhub_username')]) {
+            sh ''' docker tag java-app:${BUILD_NUMBER} suryaln/ultimate-cicd:${BUILD_NUMBER}
+            echo "$dockerhub_password" |docker login -u "$dockerhub_username" --password-stdin
+            docker push suryaln/ultimate-cicd:${BUILD_NUMBER} 
+            '''
+           }
+         }
+       }
+      stage('Update Deployment File') {
+        environment {
+            GIT_REPO_NAME = "Spring-Boot-Manifest"
+            GIT_USER_NAME = "suryaln"
+        }
+        steps {
+            withCredentials([string(credentialsId: 'github', variable: 'GITHUB_TOKEN')]) {
+                sh '''
+                    git config user.email "suryachandrucs@gmail.com"
+                    git config user.name "suryaln"
+                    BUILD_NUMBER=${BUILD_NUMBER}
+                    rm -rf *
+                    git clone https://github.com/suryaln/Spring-Boot-Manifest.git
+                    cd Spring-Boot-Manifest
+                    sed -i "s|image: suryaln/ultimate-cicd:.*|image: suryaln/ultimate-cicd:${BUILD_NUMBER}|" deployment.yaml
+                    git add deployment.yaml
+                    git commit -m "Update deployment image to version ${BUILD_NUMBER}"
+                    git push https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME} HEAD:main
+                '''
+            }
+        }
+    }
+  }
+}
