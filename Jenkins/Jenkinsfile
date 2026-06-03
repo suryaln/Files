@@ -79,3 +79,16 @@ stage('Quality Gate') {
     }
   }
 }
+
+// Stage 1: Checkout
+// Stage 2:
+// we have doc for stage 2
+// Stage 3: Quality Gate
+// setup webhook in sonar server and install plugin (sonar quality gate)
+// Stage 4&5: docker build, Tag, Push
+// configure credentials, install docker related plugins,
+// Stage 6: Updating Deployment file in different git Repo
+// using clone as we are updating deployment in diff repo,
+// And navigating using cd
+// Sed command,  made mistake in giving proper extension - yaml vs yml
+// main/master, 
